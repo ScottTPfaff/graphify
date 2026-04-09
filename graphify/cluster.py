@@ -1,4 +1,5 @@
 """Community detection on NetworkX graphs. Uses Leiden (graspologic) if available, falls back to Louvain (networkx). Splits oversized communities. Returns cohesion scores."""
+
 from __future__ import annotations
 import contextlib
 import inspect
@@ -24,18 +25,25 @@ def _partition(G: nx.Graph) -> dict[str, int]:
     Tries Leiden (graspologic) first — best quality.
     Falls back to Louvain (built into networkx) if graspologic is not installed.
 
+    Both algorithms require an undirected graph; directed input is converted
+    automatically via to_undirected() before being passed to the algorithm.
+
     Output from graspologic is suppressed to prevent ANSI escape codes
     from corrupting terminal scroll buffers on Windows PowerShell 5.1.
     """
+    # Both Leiden and Louvain require undirected input — convert if needed.
+    G_undirected = G.to_undirected() if G.is_directed() else G
+
     try:
         from graspologic.partition import leiden
+
         # Suppress graspologic output to prevent ANSI escape codes from
         # corrupting PowerShell 5.1 scroll buffer (issue #19)
         old_stderr = sys.stderr
         try:
             sys.stderr = io.StringIO()
             with _suppress_output():
-                result = leiden(G)
+                result = leiden(G_undirected)
         finally:
             sys.stderr = old_stderr
         return result
@@ -48,12 +56,12 @@ def _partition(G: nx.Graph) -> dict[str, int]:
     kwargs: dict = {"seed": 42, "threshold": 1e-4}
     if "max_level" in inspect.signature(nx.community.louvain_communities).parameters:
         kwargs["max_level"] = 10
-    communities = nx.community.louvain_communities(G, **kwargs)
+    communities = nx.community.louvain_communities(G_undirected, **kwargs)
     return {node: cid for cid, nodes in enumerate(communities) for node in nodes}
 
 
-_MAX_COMMUNITY_FRACTION = 0.25   # communities larger than 25% of graph get split
-_MIN_SPLIT_SIZE = 10             # only split if community has at least this many nodes
+_MAX_COMMUNITY_FRACTION = 0.25  # communities larger than 25% of graph get split
+_MIN_SPLIT_SIZE = 10  # only split if community has at least this many nodes
 
 
 def cluster(G: nx.Graph) -> dict[int, list[str]]:
@@ -118,13 +126,16 @@ def _split_community(G: nx.Graph, nodes: list[str]) -> list[list[str]]:
 
 
 def cohesion_score(G: nx.Graph, community_nodes: list[str]) -> float:
-    """Ratio of actual intra-community edges to maximum possible."""
+    """Ratio of actual intra-community edges to maximum possible.
+
+    For directed graphs the maximum is n*(n-1); for undirected it is n*(n-1)/2.
+    """
     n = len(community_nodes)
     if n <= 1:
         return 1.0
     subgraph = G.subgraph(community_nodes)
     actual = subgraph.number_of_edges()
-    possible = n * (n - 1) / 2
+    possible = n * (n - 1) if G.is_directed() else n * (n - 1) / 2
     return round(actual / possible, 2) if possible > 0 else 0.0
 
 

@@ -123,6 +123,7 @@ def _install_hook(hooks_dir: Path, name: str, script: str, marker: str) -> str:
         if marker in content:
             return f"already installed at {hook_path}"
         hook_path.write_text(content.rstrip() + "\n\n" + script)
+        hook_path.chmod(0o755)
         return f"appended to existing {name} hook at {hook_path}"
     hook_path.write_text("#!/bin/sh\n" + script)
     hook_path.chmod(0o755)

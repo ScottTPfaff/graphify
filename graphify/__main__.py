@@ -716,7 +716,7 @@ def main() -> None:
             print("Usage: graphify query \"<question>\" [--dfs] [--budget N] [--graph path]", file=sys.stderr)
             sys.exit(1)
         from graphify.serve import _score_nodes, _bfs, _dfs, _subgraph_to_text
-        from graphify.security import sanitize_label
+        from graphify.security import sanitize_label, validate_graph_path
         from networkx.readwrite import json_graph
         question = sys.argv[2]
         use_dfs = "--dfs" in sys.argv
@@ -743,23 +743,18 @@ def main() -> None:
                 graph_path = args[i + 1]; i += 2
             else:
                 i += 1
-        # Load graph directly — validate_graph_path restricts to graphify-out/
-        # so for custom --graph paths we resolve and load directly after existence check
-        gp = Path(graph_path).resolve()
-        if not gp.exists():
-            print(f"error: graph file not found: {gp}", file=sys.stderr)
-            sys.exit(1)
-        if not gp.suffix == ".json":
-            print(f"error: graph file must be a .json file", file=sys.stderr)
-            sys.exit(1)
         try:
             import json as _json
             import networkx as _nx
+            gp = validate_graph_path(graph_path)
             _raw = _json.loads(gp.read_text(encoding="utf-8"))
             try:
                 G = json_graph.node_link_graph(_raw, edges="links")
             except TypeError:
                 G = json_graph.node_link_graph(_raw)
+        except (ValueError, FileNotFoundError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            sys.exit(1)
         except Exception as exc:
             print(f"error: could not load graph: {exc}", file=sys.stderr)
             sys.exit(1)

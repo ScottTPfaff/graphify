@@ -11,6 +11,12 @@ from networkx.readwrite import json_graph
 from graphify.security import sanitize_label
 from graphify.analyze import _node_community_map
 
+
+def _yaml_str(s: str) -> str:
+    """Escape a string for embedding in a YAML double-quoted scalar."""
+    return s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ").replace("\r", " ")
+
+
 COMMUNITY_COLORS = [
     "#4E79A7", "#F28E2B", "#E15759", "#76B7B2", "#59A14F",
     "#EDC948", "#B07AA1", "#FF9DA7", "#9C755F", "#BAB0AC",
@@ -481,6 +487,9 @@ def to_obsidian(
         confs = []
         for u, v, edata in G.edges(node_id, data=True):
             confs.append(edata.get("confidence", "EXTRACTED"))
+        if G.is_directed():
+            for u, v, edata in G.in_edges(node_id, data=True):
+                confs.append(edata.get("confidence", "EXTRACTED"))
         if not confs:
             return "EXTRACTED"
         return Counter(confs).most_common(1)[0][0]
@@ -516,12 +525,12 @@ def to_obsidian(
         # YAML frontmatter - readable in Obsidian's properties panel
         lines += [
             "---",
-            f'source_file: "{data.get("source_file", "")}"',
-            f'type: "{ftype}"',
-            f'community: "{community_name}"',
+            f'source_file: "{_yaml_str(data.get("source_file", ""))}"',
+            f'type: "{_yaml_str(ftype)}"',
+            f'community: "{_yaml_str(community_name)}"',
         ]
         if data.get("source_location"):
-            lines.append(f'location: "{data["source_location"]}"')
+            lines.append(f'location: "{_yaml_str(data["source_location"])}"')
         # Add tags list to frontmatter
         lines.append("tags:")
         for tag in node_tags:
